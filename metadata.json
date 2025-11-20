@@ -1,0 +1,5 @@
+{
+  "name": "CineShuffle",
+  "description": "An AI-powered movie watchlist manager with a randomization feature to cure decision paralysis.",
+  "requestFramePermissions": []
+}
