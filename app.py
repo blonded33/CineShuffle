@@ -22,12 +22,8 @@ st.markdown("""
 <style>
     .stApp { background-color: #0f172a; color: white; }
     .movie-card {
-        background-color: #1e293b;
-        border-radius: 12px;
-        padding: 0;
-        overflow: hidden;
-        border: 1px solid #334155;
-        margin-bottom: 20px;
+        background-color: #1e293b; border-radius: 12px; padding: 0;
+        overflow: hidden; border: 1px solid #334155; margin-bottom: 20px;
     }
     .movie-info { padding: 10px; }
     .movie-title {
@@ -38,10 +34,3 @@ st.markdown("""
     .stButton button { border-radius: 8px; font-weight: bold; }
     div[data-testid="stHorizontalBlock"] button[kind="primary"] {
         background-color: #E11D48 !important; border-color: #E11D48 !important;
-    }
-    .header-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0; }
-    .header-suffix { color: #E11D48; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True
