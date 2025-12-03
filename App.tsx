@@ -1,452 +1,574 @@
+import streamlit as st
+import google.generativeai as genai
+import requests
+import time
+import uuid
+import json
+import random
+from datetime import datetime
 
-import React, { useState } from 'react';
-import { HashRouter, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom';
-import { useStore } from './store/useStore';
-import { Folder, Movie } from './types';
-import { CreateFolderModal } from './components/CreateFolderModal';
-import { RandomizerOverlay } from './components/RandomizerOverlay';
-import { QuickShuffleModal } from './components/QuickShuffleModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { AddMovieModal } from './components/AddMovieModal';
-import { MovieCard } from './components/MovieCard';
-import { translations } from './constants/translations';
-import { 
-  Folder as FolderIcon, 
-  Plus, 
-  ChevronRight, 
-  Shuffle, 
-  Film, 
-  Clock, 
-  ArrowLeft,
-  Sparkles,
-  Trash2,
-  RefreshCcw,
-  Zap,
-  CheckCircle,
-  Search,
-  Globe
-} from 'lucide-react';
-import { generateMovieSuggestions } from './services/geminiService';
+# ==========================================
+# 1. CONFIG & STYLES
+# ==========================================
+st.set_page_config(
+    page_title="CineShuffle",
+    page_icon="🎬",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
-// --- Components (Inline for simplicity given strict file limit, but structured logically) ---
-
-// 1. Dashboard Page
-const Dashboard = () => {
-  const { folders, history, addToHistory, language, setLanguage } = useStore();
-  const t = translations[language];
-  const [showModal, setShowModal] = useState(false);
-  const [showQuickShuffle, setShowQuickShuffle] = useState(false);
-  
-  // State for Quick Shuffle Result
-  const [quickMovies, setQuickMovies] = useState<Movie[]>([]);
-  const [showQuickRandomizer, setShowQuickRandomizer] = useState(false);
-
-  // Calculate stats
-  const totalUnwatched = useStore(state => state.movies.length);
-  const totalWatched = history.length;
-
-  const handleQuickMoviesGenerated = (movies: Movie[]) => {
-    setQuickMovies(movies);
-    setShowQuickShuffle(false);
-    setShowQuickRandomizer(true);
-  };
-
-  const handleQuickWatch = (movieId: string) => {
-    const movie = quickMovies.find(m => m.id === movieId);
-    if (movie) {
-      addToHistory(movie);
+# Custom CSS for "Cinematic" Dark Mode styling
+st.markdown("""
+<style>
+    /* Global Styles */
+    .stApp {
+        background-color: #0f172a;
+        color: white;
     }
-    setShowQuickRandomizer(false);
-    setQuickMovies([]);
-  };
-
-  return (
-    <div className="pb-24 pt-6 px-4 sm:px-6 max-w-4xl mx-auto space-y-8">
-      
-      {/* Header */}
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            {t.appTitle}<span className="text-primary">{t.appTitleSuffix}</span>
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">{t.tagline}</p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <button 
-            onClick={() => setLanguage(language === 'en' ? 'tr' : 'en')}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-200 transition-colors border border-slate-700"
-          >
-            <Globe size={14} />
-            {language === 'en' ? 'TR' : 'EN'}
-          </button>
-          <div className="bg-surface px-4 py-2 rounded-full border border-slate-700 text-xs font-medium text-slate-300 flex items-center gap-2">
-             <Film size={14} className="text-primary" /> {totalUnwatched} 
-             <span className="w-px h-3 bg-slate-600"></span>
-             <Clock size={14} className="text-green-500" /> {totalWatched}
-          </div>
-        </div>
-      </header>
-
-      {/* Instant Action Banner */}
-      <section>
-        <button 
-          onClick={() => setShowQuickShuffle(true)}
-          className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-orange-600 p-6 text-left shadow-lg shadow-primary/20 group hover:scale-[1.01] transition-transform"
-        >
-          <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-30 transition-opacity group-hover:rotate-12 transform duration-500">
-             <Zap size={100} className="fill-white" />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2 text-white/80 font-bold text-xs uppercase tracking-wider">
-              <Sparkles size={14} />
-              <span>{t.instantLabel}</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">{t.instantTitle}</h2>
-            <p className="text-white/90 text-sm sm:text-base max-w-xs">
-              {t.instantDesc}
-            </p>
-          </div>
-        </button>
-      </section>
-
-      {/* Folders Grid */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">{t.collectionsTitle}</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Create New Button */}
-          <button 
-            onClick={() => setShowModal(true)}
-            className="flex items-center justify-center gap-3 h-24 rounded-xl border-2 border-dashed border-slate-700 text-slate-400 hover:border-primary hover:text-primary hover:bg-surface/50 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-              <Plus size={20} />
-            </div>
-            <span className="font-semibold">{t.createNew}</span>
-          </button>
-
-          {/* Folder Cards */}
-          {folders.map(folder => (
-            <Link 
-              key={folder.id} 
-              to={`/folder/${folder.id}`}
-              className="relative group bg-surface rounded-xl p-5 border border-slate-800 hover:border-slate-600 transition-all shadow-lg hover:shadow-xl flex flex-col justify-between h-32 overflow-hidden"
-            >
-              {folder.type === 'ai' && (
-                <div className="absolute -right-4 -top-4 w-16 h-16 bg-secondary/20 rounded-full blur-xl group-hover:bg-secondary/30 transition-all" />
-              )}
-              
-              <div className="flex items-start justify-between relative z-10">
-                <div className={`p-2 rounded-lg ${folder.type === 'ai' ? 'bg-secondary/20 text-secondary' : 'bg-slate-700 text-slate-300'}`}>
-                  {folder.type === 'ai' ? <Sparkles size={20} /> : <FolderIcon size={20} />}
-                </div>
-                {folder.type === 'ai' && (
-                   <span className="text-[10px] uppercase tracking-wider font-bold text-secondary border border-secondary/30 px-2 py-0.5 rounded-full">AI</span>
-                )}
-              </div>
-              
-              <div className="relative z-10">
-                <h3 className="font-bold text-white text-lg truncate">{folder.name}</h3>
-                <div className="flex items-center text-xs text-slate-400 mt-1">
-                  <span>{useStore.getState().movies.filter(m => m.folderId === folder.id).length} {t.moviesCount}</span>
-                  <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0" />
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-      
-      {/* History Link */}
-      <section>
-        <Link to="/history" className="block bg-gradient-to-r from-slate-800 to-slate-900 p-4 rounded-xl border border-slate-700/50 flex items-center gap-4 hover:border-slate-600 transition-colors">
-           <div className="p-3 bg-green-500/10 text-green-500 rounded-lg">
-             <Clock size={20} />
-           </div>
-           <div>
-             <h3 className="font-bold text-white">{t.watchHistory}</h3>
-             <p className="text-xs text-slate-400">{t.watchHistoryDesc}</p>
-           </div>
-           <ChevronRight size={18} className="ml-auto text-slate-500" />
-        </Link>
-      </section>
-
-      {showModal && <CreateFolderModal onClose={() => setShowModal(false)} />}
-      
-      {showQuickShuffle && (
-        <QuickShuffleModal 
-          onClose={() => setShowQuickShuffle(false)} 
-          onMoviesGenerated={handleQuickMoviesGenerated}
-        />
-      )}
-
-      {showQuickRandomizer && (
-        <RandomizerOverlay 
-          movies={quickMovies} 
-          onClose={() => setShowQuickRandomizer(false)} 
-          onWatch={handleQuickWatch}
-        />
-      )}
-    </div>
-  );
-};
-
-// 2. Folder Details Page
-const FolderDetails = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { folders, movies, deleteFolder, addMovie, removeMovie, markAsWatched, language } = useStore();
-  const t = translations[language];
-  
-  const folder = folders.find(f => f.id === id);
-  const folderMovies = movies.filter(m => m.folderId === id);
-  
-  const [showRandomizer, setShowRandomizer] = useState(false);
-  const [showAddMovie, setShowAddMovie] = useState(false);
-  const [isRefilling, setIsRefilling] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  if (!folder) return <div className="text-center p-10 text-slate-400">Folder not found</div>;
-
-  const handleRefill = async () => {
-    if (!folder.aiPrompt) return;
-    setIsRefilling(true);
-    try {
-      const newSuggestions = await generateMovieSuggestions(folder.aiPrompt, language);
-      // Filter out duplicates roughly by title
-      const existingTitles = new Set(folderMovies.map(m => m.title.toLowerCase()));
-      const uniqueNew = newSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
-      
-      uniqueNew.forEach(s => {
-        addMovie({
-          id: Math.random().toString(36).substr(2, 9),
-          title: s.title,
-          year: s.year,
-          overview: s.short_summary,
-          posterUrl: s.poster_url, // Pass through URL if valid
-          folderId: folder.id,
-          addedAt: Date.now()
-        });
-      });
-    } catch (e) {
-      console.error(e);
+    
+    /* Card Styling */
+    .movie-card {
+        background-color: #1e293b;
+        border-radius: 12px;
+        padding: 0;
+        overflow: hidden;
+        border: 1px solid #334155;
+        transition: transform 0.2s;
+        margin-bottom: 20px;
     }
-    setIsRefilling(false);
-  };
+    
+    .movie-info {
+        padding: 10px;
+    }
+    
+    .movie-title {
+        font-weight: bold;
+        font-size: 1rem;
+        color: white;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .movie-year {
+        font-size: 0.8rem;
+        color: #94a3b8;
+    }
 
-  const handleDelete = () => {
-    setShowDeleteConfirm(true);
-  };
+    /* Buttons */
+    .stButton button {
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    
+    /* Primary Button Color Override */
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+        background-color: #E11D48 !important;
+        border-color: #E11D48 !important;
+    }
 
-  const confirmDelete = () => {
-    deleteFolder(folder.id);
-    navigate('/');
-  };
+    /* Header */
+    .header-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 0;
+    }
+    .header-suffix {
+        color: #E11D48;
+    }
+    
+    /* Hide Streamlit Elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+</style>
+""", unsafe_allow_html=True)
 
-  const handleWatch = (movieId: string) => {
-     markAsWatched(movieId);
-     setShowRandomizer(false);
-  };
+# ==========================================
+# 2. STATE MANAGEMENT (Zustand equivalent)
+# ==========================================
 
-  return (
-    <div className="min-h-screen flex flex-col bg-dark">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-dark/80 backdrop-blur-md border-b border-slate-800 px-4 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <button onClick={() => navigate('/')} className="p-2 -ml-2 text-slate-300 hover:text-white">
-            <ArrowLeft size={24} />
-          </button>
-          <h1 className="font-bold text-lg text-white truncate max-w-[150px] sm:max-w-[250px]">{folder.name}</h1>
-        </div>
+# Initialize Session State
+if 'folders' not in st.session_state:
+    st.session_state.folders = [
+        {'id': '1', 'name': 'Weekend Watch', 'type': 'standard', 'createdAt': time.time()},
+        {'id': '2', 'name': '90s Sci-Fi Gems', 'type': 'ai', 'aiPrompt': 'Underrated 90s Sci-Fi movies', 'createdAt': time.time()}
+    ]
+
+if 'movies' not in st.session_state:
+    st.session_state.movies = [
+        {'id': 'm1', 'folderId': '1', 'title': 'Inception', 'year': '2010', 'posterUrl': 'https://image.tmdb.org/t/p/w500/9gk7admal40G07SfTsalzp80sLC.jpg', 'overview': 'A thief who steals corporate secrets...', 'addedAt': time.time()},
+        {'id': 'm2', 'folderId': '2', 'title': 'Dark City', 'year': '1998', 'posterUrl': 'https://image.tmdb.org/t/p/w500/5gppu1775K4E6y6j6y73b7549.jpg', 'overview': 'A man struggles with memories...', 'addedAt': time.time()}
+    ]
+
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+if 'language' not in st.session_state:
+    st.session_state.language = 'en'
+
+if 'page' not in st.session_state:
+    st.session_state.page = 'dashboard'
+
+if 'active_folder_id' not in st.session_state:
+    st.session_state.active_folder_id = None
+
+# Actions
+def set_page(page_name, folder_id=None):
+    st.session_state.page = page_name
+    if folder_id:
+        st.session_state.active_folder_id = folder_id
+    st.rerun()
+
+def toggle_language():
+    st.session_state.language = 'tr' if st.session_state.language == 'en' else 'en'
+    st.rerun()
+
+def delete_folder(folder_id):
+    st.session_state.folders = [f for f in st.session_state.folders if f['id'] != folder_id]
+    st.session_state.movies = [m for m in st.session_state.movies if m['folderId'] != folder_id]
+    set_page('dashboard')
+
+def mark_as_watched(movie_id):
+    movie = next((m for m in st.session_state.movies if m['id'] == movie_id), None)
+    if movie:
+        st.session_state.movies = [m for m in st.session_state.movies if m['id'] != movie_id]
+        movie['watchedAt'] = time.time()
+        st.session_state.history.insert(0, movie)
+        st.rerun()
+
+def delete_movie(movie_id):
+    st.session_state.movies = [m for m in st.session_state.movies if m['id'] != movie_id]
+    st.rerun()
+
+def delete_from_history(movie_id):
+    st.session_state.history = [m for m in st.session_state.history if m['id'] != movie_id]
+    st.rerun()
+
+def add_folder_action(name, folder_type, prompt=None):
+    new_id = str(uuid.uuid4())
+    new_folder = {
+        'id': new_id,
+        'name': name,
+        'type': folder_type,
+        'aiPrompt': prompt,
+        'createdAt': time.time()
+    }
+    st.session_state.folders.insert(0, new_folder)
+    return new_id
+
+def add_movie_action(movie_data):
+    st.session_state.movies.insert(0, movie_data)
+
+# ==========================================
+# 3. SERVICES (API Integrations)
+# ==========================================
+
+# API Keys from st.secrets (Make sure .streamlit/secrets.toml exists or handle gracefully)
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+TMDB_API_KEY = st.secrets.get("TMDB_API_KEY", "")
+
+# Gemini Service
+def generate_movie_suggestions(prompt, lang='en'):
+    if not GEMINI_API_KEY:
+        st.warning("⚠️ API Key Missing! Please add GEMINI_API_KEY to secrets.")
+        return []
+    
+    genai.configure(api_key=GEMINI_API_KEY)
+    
+    lang_instruction = "Provide titles in Turkish and summaries in Turkish." if lang == 'tr' else "Provide English titles and summaries."
+    
+    prompt_text = f"""
+    Suggest 5 distinct movies based on: "{prompt}".
+    Ensure they are real movies.
+    {lang_instruction}
+    Return a JSON array of objects with keys: "title", "year", "short_summary".
+    """
+    
+    try:
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        response = model.generate_content(prompt_text, generation_config={"response_mime_type": "application/json"})
+        return json.loads(response.text)
+    except Exception as e:
+        st.error(f"AI Error: {e}")
+        return []
+
+def search_movies_ai(query, lang='en'):
+    if not GEMINI_API_KEY: return []
+    genai.configure(api_key=GEMINI_API_KEY)
+    lang_instruction = "Provide short_summary in Turkish." if lang == 'tr' else ""
+    
+    prompt_text = f"""
+    Search for real movies matching: "{query}".
+    Return top 5 results as a JSON array with keys: "title", "year", "short_summary".
+    {lang_instruction}
+    """
+    try:
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        response = model.generate_content(prompt_text, generation_config={"response_mime_type": "application/json"})
+        return json.loads(response.text)
+    except:
+        return []
+
+# TMDB Service
+def search_tmdb(query, lang='en'):
+    if not TMDB_API_KEY: return []
+    lang_code = 'tr-TR' if lang == 'tr' else 'en-US'
+    url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={query}&language={lang_code}"
+    try:
+        res = requests.get(url).json()
+        results = []
+        for item in res.get('results', [])[:5]:
+            results.append({
+                'title': item['title'],
+                'year': item.get('release_date', '')[:4],
+                'overview': item['overview'],
+                'posterUrl': f"https://image.tmdb.org/t/p/w500{item['poster_path']}" if item.get('poster_path') else None
+            })
+        return results
+    except:
+        return []
+
+def hydrate_with_tmdb(title, year, lang='en'):
+    if not TMDB_API_KEY: return None
+    lang_code = 'tr-TR' if lang == 'tr' else 'en-US'
+    try:
+        url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}&year={year}&language={lang_code}"
+        data = requests.get(url).json()
+        if data.get('results'):
+            item = data['results'][0]
+            return {
+                'posterUrl': f"https://image.tmdb.org/t/p/w500{item['poster_path']}" if item.get('poster_path') else None,
+                'overview': item['overview']
+            }
+    except:
+        pass
+    return None
+
+# ==========================================
+# 4. TRANSLATIONS
+# ==========================================
+TRANS = {
+    'en': {
+        'appTitle': "CineShuffle", 'tagline': "What are we watching?", 'collections': "Your Collections",
+        'createNew': "Create New", 'instant': "Shuffle Play", 'instantDesc': "Pick a mood, get a movie.",
+        'movies': "movies", 'history': "History", 'empty': "No movies here.", 'add': "Add Movie",
+        'shuffle': "Shuffle Pick", 'watch': "Watch", 'delete': "Delete", 'back': "Back",
+        'folderName': "Folder Name", 'aiPrompt': "AI Prompt (e.g. 90s Horror)", 'create': "Create",
+        'standard': "Standard", 'ai': "AI Powered", 'search': "Search movie...", 'results': "Results",
+        'confirmDelete': "Delete this folder?", 'picking': "Picking...", 'winner': "Tonight's Pick",
+        'refill': "Refill AI", 'watched': "Watched", 'emptyHistory': "History is empty."
+    },
+    'tr': {
+        'appTitle': "CineShuffle", 'tagline': "Ne izliyoruz?", 'collections': "Koleksiyonların",
+        'createNew': "Yeni Oluştur", 'instant': "Karıştır İzle", 'instantDesc': "Modunu seç, filmi kap.",
+        'movies': "film", 'history': "Geçmiş", 'empty': "Burada film yok.", 'add': "Film Ekle",
+        'shuffle': "Rastgele Seç", 'watch': "İzle", 'delete': "Sil", 'back': "Geri",
+        'folderName': "Klasör Adı", 'aiPrompt': "YZ İstemi (örn. 90lar Korku)", 'create': "Oluştur",
+        'standard': "Standart", 'ai': "YZ Destekli", 'search': "Film ara...", 'results': "Sonuçlar",
+        'confirmDelete': "Klasörü sil?", 'picking': "Seçiliyor...", 'winner': "Bu Geceki Seçim",
+        'refill': "YZ ile Doldur", 'watched': "İzlendi", 'emptyHistory': "Geçmiş boş."
+    }
+}
+
+# ==========================================
+# 5. PAGES & COMPONENTS
+# ==========================================
+
+def t(key):
+    return TRANS[st.session_state.language][key]
+
+def sidebar():
+    with st.sidebar:
+        st.title("⚙️ Settings")
+        if st.button("🌐 " + ("English" if st.session_state.language == 'tr' else "Türkçe")):
+            toggle_language()
         
-        <div className="flex items-center gap-1">
-           <button 
-             onClick={() => setShowAddMovie(true)}
-             className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
-             title={t.addManually}
-           >
-             <Plus size={24} />
-           </button>
-           <button onClick={handleDelete} className="p-2 text-slate-500 hover:text-red-500 transition-colors">
-             <Trash2 size={20} />
-           </button>
-        </div>
-      </div>
+        st.divider()
+        if st.button("📜 " + t('history')):
+            set_page('history')
+        if st.button("🏠 Dashboard"):
+            set_page('dashboard')
 
-      {/* Content */}
-      <div className="flex-1 p-4 pb-32 max-w-5xl mx-auto w-full">
-        {folder.type === 'ai' && (
-          <div className="bg-secondary/10 border border-secondary/20 rounded-2xl p-4 mb-6 flex items-start gap-3">
-            <Sparkles className="text-secondary shrink-0 mt-0.5" size={16} />
-            <div>
-              <p className="text-xs text-secondary font-bold uppercase tracking-wide mb-1">{t.aiPromptLabel}</p>
-              <p className="text-sm text-slate-300 italic">"{folder.aiPrompt}"</p>
+def render_movie_card(movie, show_actions=True, compact=False):
+    # Using HTML/CSS for card rendering because Streamlit columns are too wide
+    poster = movie.get('posterUrl') or "https://via.placeholder.com/300x450/1e293b/ffffff?text=No+Image"
+    
+    col1, col2 = st.columns([1, 2]) if compact else st.columns([1])
+    
+    with st.container():
+        st.markdown(f"""
+        <div style="display: flex; gap: 10px; margin-bottom: 10px; background: #1e293b; border-radius: 10px; overflow: hidden; border: 1px solid #334155;">
+            <img src="{poster}" style="width: {'80px' if compact else '100px'}; height: {'120px' if compact else '150px'}; object-fit: cover;">
+            <div style="padding: 10px; flex: 1;">
+                <div style="font-weight: bold; font-size: 1.1rem;">{movie['title']}</div>
+                <div style="color: #94a3b8; font-size: 0.9rem;">{movie['year']}</div>
+                <div style="color: #64748b; font-size: 0.8rem; height: 40px; overflow: hidden;">{movie.get('overview', '')[:60]}...</div>
             </div>
-          </div>
-        )}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if show_actions:
+            c1, c2 = st.columns(2)
+            if c1.button(f"👁️ {t('watch')}", key=f"w_{movie['id']}"):
+                mark_as_watched(movie['id'])
+            if c2.button(f"🗑️", key=f"d_{movie['id']}"):
+                delete_movie(movie['id'])
 
-        {folderMovies.length === 0 ? (
-           <div className="flex flex-col items-center justify-center py-20 text-slate-500 text-center">
-              <Film size={48} className="mb-4 opacity-20" />
-              <p className="mb-6">{t.emptyFolder}</p>
-              
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button 
-                  onClick={() => setShowAddMovie(true)} 
-                  className="px-6 py-3 bg-surface border border-slate-700 text-white rounded-xl font-medium text-sm hover:bg-slate-700 flex items-center gap-2"
-                >
-                   <Search size={16} />
-                   {t.addManually}
-                </button>
-                
-                {folder.type === 'ai' && (
-                  <button 
-                    onClick={handleRefill} 
-                    disabled={isRefilling}
-                    className="px-6 py-3 bg-secondary text-white rounded-xl font-medium text-sm flex items-center gap-2"
-                  >
-                    {isRefilling ? <RefreshCcw className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                    {isRefilling ? t.generating : t.generateMore}
-                  </button>
-                )}
-              </div>
-           </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {folderMovies.map(movie => (
-              <MovieCard 
-                key={movie.id} 
-                movie={movie} 
-                onWatch={markAsWatched}
-                onDelete={removeMovie}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+def page_dashboard():
+    # Header
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"<h1 class='header-title'>{t('appTitle')}<span class='header-suffix'>Shuffle</span></h1>", unsafe_allow_html=True)
+        st.caption(t('tagline'))
+    with col2:
+        st.metric(label=t('history'), value=len(st.session_state.history))
 
-      {/* Sticky Footer Action */}
-      <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center gap-4 pointer-events-none z-20">
-         <div className="pointer-events-auto flex gap-4">
-            {folder.type === 'ai' && (
-              <button 
-                onClick={handleRefill}
-                disabled={isRefilling}
-                className="w-14 h-14 rounded-full bg-surface border border-slate-600 text-slate-300 shadow-xl flex items-center justify-center hover:bg-slate-700 hover:text-white transition-all"
-                title={t.refillTitle}
-              >
-                <RefreshCcw size={24} className={isRefilling ? 'animate-spin' : ''} />
-              </button>
-            )}
+    # Instant Shuffle
+    st.markdown("---")
+    with st.container():
+        st.subheader(f"⚡ {t('instant')}")
+        st.caption(t('instantDesc'))
+        with st.form("quick_shuffle"):
+            mood = st.text_input("Mood", placeholder="Sci-fi, Funny, Dark...")
+            submitted = st.form_submit_button(t('shuffle'))
+            if submitted and mood:
+                with st.spinner(t('picking')):
+                    suggestions = generate_movie_suggestions(mood, st.session_state.language)
+                    if suggestions:
+                        # Convert to movie objects
+                        temp_movies = []
+                        for s in suggestions:
+                            meta = hydrate_with_tmdb(s['title'], s['year'], st.session_state.language)
+                            temp_movies.append({
+                                'id': str(uuid.uuid4()), 'title': s['title'], 'year': s['year'],
+                                'overview': meta['overview'] if meta else s['short_summary'],
+                                'posterUrl': meta['posterUrl'] if meta else None
+                            })
+                        
+                        # Pick one
+                        winner = random.choice(temp_movies)
+                        # Add to history directly? Or show result
+                        st.session_state.winner_movie = winner
+                        st.session_state.temp_shuffle_list = temp_movies # For animation effect if needed
+                        set_page('randomizer')
+
+    # Folders
+    st.markdown("---")
+    st.subheader(f"📂 {t('collections')}")
+    
+    # Create New Folder
+    with st.expander(f"➕ {t('createNew')}"):
+        with st.form("new_folder"):
+            f_name = st.text_input(t('folderName'))
+            f_type = st.radio("Type", ["Standard", "AI Powered"])
+            f_prompt = st.text_area(t('aiPrompt')) if f_type == "AI Powered" else None
             
-            {folderMovies.length > 0 && (
-              <button 
-                onClick={() => setShowRandomizer(true)}
-                className="h-14 px-8 rounded-full bg-primary text-white shadow-xl shadow-primary/30 flex items-center gap-2 font-bold text-lg hover:bg-rose-700 transition-transform active:scale-95"
-              >
-                <Shuffle size={20} />
-                {t.shufflePick}
-              </button>
-            )}
-         </div>
-      </div>
+            if st.form_submit_button(t('create')):
+                fid = add_folder_action(f_name, 'ai' if f_type == "AI Powered" else 'standard', f_prompt)
+                
+                if f_type == "AI Powered" and f_prompt:
+                    with st.spinner("AI Magic happening..."):
+                        suggestions = generate_movie_suggestions(f_prompt, st.session_state.language)
+                        for s in suggestions:
+                            meta = hydrate_with_tmdb(s['title'], s['year'], st.session_state.language)
+                            add_movie_action({
+                                'id': str(uuid.uuid4()), 'folderId': fid, 'title': s['title'], 'year': s['year'],
+                                'overview': meta['overview'] if meta else s['short_summary'],
+                                'posterUrl': meta['posterUrl'] if meta else None,
+                                'addedAt': time.time()
+                            })
+                set_page('dashboard')
 
-      {showRandomizer && (
-        <RandomizerOverlay 
-          movies={folderMovies} 
-          onClose={() => setShowRandomizer(false)} 
-          onWatch={handleWatch}
-        />
-      )}
-      
-      {showAddMovie && (
-        <AddMovieModal 
-          folderId={folder.id}
-          onAddMovie={addMovie}
-          onClose={() => setShowAddMovie(false)}
-        />
-      )}
+    # List Folders
+    if not st.session_state.folders:
+        st.info("No folders yet.")
+    
+    for folder in st.session_state.folders:
+        count = len([m for m in st.session_state.movies if m['folderId'] == folder['id']])
+        col_a, col_b = st.columns([4, 1])
+        with col_a:
+            label = f"📁 **{folder['name']}**"
+            if folder['type'] == 'ai': label += " ✨"
+            st.markdown(label)
+            st.caption(f"{count} {t('movies')}")
+        with col_b:
+            if st.button("Open", key=f"open_{folder['id']}"):
+                set_page('folder', folder['id'])
+        st.divider()
 
-      <ConfirmationModal 
-        isOpen={showDeleteConfirm}
-        title={t.confirmDeleteTitle}
-        message={t.confirmDeleteMsg}
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-        confirmLabel={t.confirmLabel}
-        cancelLabel={t.cancelLabel}
-        isDangerous={true}
-      />
-    </div>
-  );
-};
+def page_folder():
+    fid = st.session_state.active_folder_id
+    folder = next((f for f in st.session_state.folders if f['id'] == fid), None)
+    if not folder:
+        set_page('dashboard')
+        return
 
-// 3. History Page
-const HistoryPage = () => {
-  const navigate = useNavigate();
-  const { history, removeFromHistory, language } = useStore();
-  const t = translations[language];
+    # Header
+    c1, c2, c3 = st.columns([1, 4, 1])
+    if c1.button(f"⬅️"): set_page('dashboard')
+    c2.markdown(f"## {folder['name']}")
+    if c3.button("🗑️", type="primary"): 
+        delete_folder(fid)
+    
+    folder_movies = [m for m in st.session_state.movies if m['folderId'] == fid]
 
-  return (
-    <div className="min-h-screen bg-dark p-4 max-w-4xl mx-auto">
-      <header className="flex items-center gap-4 mb-8">
-        <button onClick={() => navigate('/')} className="p-2 -ml-2 text-slate-300 hover:text-white">
-          <ArrowLeft size={24} />
-        </button>
-        <h1 className="text-2xl font-bold text-white">{t.watchHistory}</h1>
-      </header>
+    # Actions
+    ac1, ac2 = st.columns(2)
+    if ac1.button(f"🎲 {t('shuffle')}", use_container_width=True, type="primary"):
+        if folder_movies:
+            st.session_state.winner_movie = None # Reset
+            st.session_state.shuffle_pool = folder_movies
+            set_page('randomizer', fid)
+        else:
+            st.warning("Empty folder!")
 
-      <div className="space-y-4">
-        {history.length === 0 ? (
-           <p className="text-slate-500 text-center py-10">{t.emptyHistory}</p>
-        ) : (
-          history.map(movie => (
-            <div key={movie.id} className="relative flex gap-4 bg-surface p-3 rounded-xl border border-slate-800 opacity-75 grayscale hover:grayscale-0 hover:opacity-100 transition-all items-center group">
-               <div className="w-16 h-16 rounded-lg bg-slate-800 shrink-0 overflow-hidden flex items-center justify-center">
-                  {movie.posterUrl && !movie.posterUrl.includes('picsum') ? (
-                    <img src={movie.posterUrl} className="w-full h-full object-cover" />
-                  ) : (
-                    <Film className="text-slate-600" size={24} />
-                  )}
-               </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-bold truncate">{movie.title}</h3>
-                  <p className="text-sm text-slate-400">{movie.year}</p>
-                </div>
-                <div className="flex items-center gap-3 pl-2">
-                   <div className="text-xs text-green-500 flex items-center gap-1 whitespace-nowrap">
-                      <CheckCircle size={14} /> <span className="hidden sm:inline">{t.watchedLabel}</span>
-                   </div>
-                   <button 
-                     onClick={() => removeFromHistory(movie.id)}
-                     className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                     title={t.removeFromHistory}
-                   >
-                     <Trash2 size={18} />
-                   </button>
-                </div>
+    if folder['type'] == 'ai' and ac2.button(f"✨ {t('refill')}", use_container_width=True):
+        with st.spinner("AI is thinking..."):
+            suggestions = generate_movie_suggestions(folder['aiPrompt'], st.session_state.language)
+            for s in suggestions:
+                # Check duplicate roughly
+                if not any(m['title'] == s['title'] for m in folder_movies):
+                    meta = hydrate_with_tmdb(s['title'], s['year'], st.session_state.language)
+                    add_movie_action({
+                        'id': str(uuid.uuid4()), 'folderId': fid, 'title': s['title'], 'year': s['year'],
+                        'overview': meta['overview'] if meta else s['short_summary'],
+                        'posterUrl': meta['posterUrl'] if meta else None,
+                        'addedAt': time.time()
+                    })
+            st.rerun()
+
+    # Add Movie Search
+    with st.expander(f"🔍 {t('add')}"):
+        query = st.text_input(t('search'))
+        if st.button("Go"):
+            results = []
+            # Try TMDB
+            tmdb_res = search_tmdb(query, st.session_state.language)
+            if tmdb_res:
+                results = tmdb_res
+            else:
+                # Fallback AI
+                results = search_movies_ai(query, st.session_state.language)
+            
+            st.session_state.search_results = results
+
+        if 'search_results' in st.session_state:
+            for res in st.session_state.search_results:
+                rc1, rc2 = st.columns([3, 1])
+                rc1.write(f"**{res['title']}** ({res['year']})")
+                if rc2.button("Add", key=f"add_{res['title']}"):
+                    add_movie_action({
+                        'id': str(uuid.uuid4()), 'folderId': fid, 'title': res['title'], 'year': res['year'],
+                        'overview': res.get('overview'),
+                        'posterUrl': res.get('posterUrl'),
+                        'addedAt': time.time()
+                    })
+                    st.success("Added!")
+                    time.sleep(0.5)
+                    st.rerun()
+
+    # Movie List Grid
+    st.divider()
+    if not folder_movies:
+        st.info(t('empty'))
+    else:
+        # Create grid layout
+        cols = st.columns(2)
+        for i, movie in enumerate(folder_movies):
+            with cols[i % 2]:
+                render_movie_card(movie)
+
+def page_randomizer():
+    # Retrieve pool
+    pool = st.session_state.get('shuffle_pool') or st.session_state.get('temp_shuffle_list')
+    winner = st.session_state.get('winner_movie')
+
+    # Animation Loop if winner not already set contextually or strictly needed
+    # Since Streamlit reruns script, we handle animation via placeholder
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    placeholder = st.empty()
+    
+    if not winner and pool:
+        # Animation
+        for _ in range(15):
+            m = random.choice(pool)
+            poster = m.get('posterUrl') or "https://via.placeholder.com/300"
+            placeholder.markdown(f"""
+            <div style="text-align: center; opacity: 0.7;">
+                <h2>{t('picking')}</h2>
+                <img src="{poster}" style="width: 200px; height: 300px; object-fit: cover; border-radius: 15px;">
+                <h3>{m['title']}</h3>
             </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
+            """, unsafe_allow_html=True)
+            time.sleep(0.1)
+        
+        winner = random.choice(pool)
+        st.session_state.winner_movie = winner
+    
+    # Show Winner
+    if winner:
+        poster = winner.get('posterUrl') or "https://via.placeholder.com/300"
+        placeholder.markdown(f"""
+        <div style="text-align: center; animation: zoom-in 0.5s;">
+            <h1 style="color: #E11D48;">🎉 {t('winner')} 🎉</h1>
+            <img src="{poster}" style="width: 250px; height: 375px; object-fit: cover; border-radius: 20px; box-shadow: 0 0 30px #E11D48;">
+            <h2>{winner['title']} ({winner['year']})</h2>
+            <p>{winner.get('overview', '')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        c1, c2 = st.columns(2)
+        if c1.button(f"✅ {t('watch')}", use_container_width=True, type="primary"):
+            # If it's a temp movie (Quick Shuffle), add to history manually
+            if 'temp_shuffle_list' in st.session_state:
+                winner['watchedAt'] = time.time()
+                st.session_state.history.insert(0, winner)
+                del st.session_state.temp_shuffle_list
+                del st.session_state.winner_movie
+                set_page('history')
+            else:
+                # Existing movie
+                mark_as_watched(winner['id'])
+                set_page('dashboard')
+                
+        if c2.button(f"🔙 {t('back')}", use_container_width=True):
+            if st.session_state.active_folder_id:
+                set_page('folder', st.session_state.active_folder_id)
+            else:
+                set_page('dashboard')
 
-// --- Main App Component ---
+def page_history():
+    st.title(f"📜 {t('history')}")
+    if st.button(t('back')): set_page('dashboard')
+    
+    if not st.session_state.history:
+        st.info(t('emptyHistory'))
+    
+    for m in st.session_state.history:
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            st.markdown(f"**{m['title']}** ({m['year']})")
+            st.caption(f"Watched: {datetime.fromtimestamp(m.get('watchedAt', time.time())).strftime('%Y-%m-%d')}")
+        with c2:
+            if st.button("❌", key=f"hist_{m['id']}"):
+                delete_from_history(m['id'])
+        st.divider()
 
-const App: React.FC = () => {
-  return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/folder/:id" element={<FolderDetails />} />
-        <Route path="/history" element={<HistoryPage />} />
-      </Routes>
-    </HashRouter>
-  );
-};
+# ==========================================
+# 6. MAIN ROUTER
+# ==========================================
 
-export default App;
+sidebar()
+
+if st.session_state.page == 'dashboard':
+    page_dashboard()
+elif st.session_state.page == 'folder':
+    page_folder()
+elif st.session_state.page == 'randomizer':
+    page_randomizer()
+elif st.session_state.page == 'history':
+    page_history()
