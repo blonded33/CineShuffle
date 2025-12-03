@@ -154,11 +154,35 @@ def hydrate_with_tmdb(title, year, lang='en'):
     return None
 
 # ==========================================
-# 4. TRANSLATIONS
+# 4. TRANSLATIONS (Fixed)
 # ==========================================
 TRANS = {
-    'en': {'appTitle': "CineShuffle", 'tagline': "What are we watching?", 'createNew': "Create New", 'instant': "Shuffle Play", 'instantDesc': "Pick a mood, get a movie.", 'movies': "movies", 'history': "History", 'empty': "No movies here.", 'add': "Add Movie", 'shuffle': "Shuffle Pick", 'watch': "Watch", 'delete': "Delete", 'back': "Back", 'folderName': "Folder Name", 'aiPrompt': "AI Prompt", 'create': "Create", 'standard': "Standard", 'ai': "AI Powered", 'search': "Search movie...", 'picking': "Picking...", 'winner': "Tonight's Pick", 'refill': "Refill AI", 'watched': "Watched", 'emptyHistory': "History is empty."},
-    'tr': {'appTitle': "CineShuffle", 'tagline': "Ne izliyoruz?", 'createNew': "Yeni Oluştur", 'instant': "Karıştır İzle", 'instantDesc': "Modunu seç, filmi kap.", 'movies': "film", 'history': "Geçmiş", 'empty': "Burada film yok.", 'add': "Film Ekle", 'shuffle': "Rastgele Seç", 'watch': "İzle", 'delete': "Sil", 'back': "Geri", 'folderName': "Klasör Adı", 'aiPrompt': "YZ İstemi", 'create': "Oluştur", 'standard': "Standart", 'ai': "YZ Destekli", 'search': "Film ara...", 'picking': "Seçiliyor...", 'winner': "Bu Geceki Seçim", 'refill': "YZ ile Doldur", 'watched': "İzlendi", 'emptyHistory': "Geçmiş boş."}
+    'en': {
+        'appTitle': "CineShuffle", 'tagline': "What are we watching?", 
+        'collections': "Your Collections", # Added Back
+        'createNew': "Create New", 'instant': "Shuffle Play", 
+        'instantDesc': "Pick a mood, get a movie.", 'movies': "movies", 
+        'history': "History", 'empty': "No movies here.", 'add': "Add Movie", 
+        'shuffle': "Shuffle Pick", 'watch': "Watch", 'delete': "Delete", 
+        'back': "Back", 'folderName': "Folder Name", 'aiPrompt': "AI Prompt", 
+        'create': "Create", 'standard': "Standard", 'ai': "AI Powered", 
+        'search': "Search movie...", 'picking': "Picking...", 
+        'winner': "Tonight's Pick", 'refill': "Refill AI", 
+        'watched': "Watched", 'emptyHistory': "History is empty."
+    },
+    'tr': {
+        'appTitle': "CineShuffle", 'tagline': "Ne izliyoruz?", 
+        'collections': "Koleksiyonların", # Added Back
+        'createNew': "Yeni Oluştur", 'instant': "Karıştır İzle", 
+        'instantDesc': "Modunu seç, filmi kap.", 'movies': "film", 
+        'history': "Geçmiş", 'empty': "Burada film yok.", 'add': "Film Ekle", 
+        'shuffle': "Rastgele Seç", 'watch': "İzle", 'delete': "Sil", 
+        'back': "Geri", 'folderName': "Klasör Adı", 'aiPrompt': "YZ İstemi", 
+        'create': "Oluştur", 'standard': "Standart", 'ai': "YZ Destekli", 
+        'search': "Film ara...", 'picking': "Seçiliyor...", 
+        'winner': "Bu Geceki Seçim", 'refill': "YZ ile Doldur", 
+        'watched': "İzlendi", 'emptyHistory': "Geçmiş boş."
+    }
 }
 def t(key): return TRANS[st.session_state.language][key]
 
